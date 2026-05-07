@@ -1,0 +1,37 @@
+{
+  "name": "knox-timeline",
+  "version": "0.1.0",
+  "description": "BusyCal-style timeline view of your Fastmail calendar in an Obsidian sidebar leaf, with one-click meeting note creation.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production"
+  },
+  "keywords": [
+    "obsidian",
+    "plugin",
+    "calendar",
+    "timeline",
+    "fastmail",
+    "caldav",
+    "meeting-notes"
+  ],
+  "author": "Chris Wagner",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cwagner223355/knox-timeline"
+  },
+  "bugs": {
+    "url": "https://github.com/cwagner223355/knox-timeline/issues"
+  },
+  "homepage": "https://github.com/cwagner223355/knox-timeline",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "builtin-modules": "^3.3.0",
+    "esbuild": "^0.20.0",
+    "obsidian": "^1.5.0",
+    "tslib": "^2.6.0",
+    "typescript": "^5.3.0"
+  }
+}

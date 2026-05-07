@@ -1,0 +1,9 @@
+{
+  "id": "knox-timeline",
+  "name": "Knox Timeline",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "BusyCal-style timeline view of Fastmail calendar in a sidebar leaf, with one-click meeting note creation.",
+  "author": "Chris Wagner",
+  "isDesktopOnly": true
+}
