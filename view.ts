@@ -33,6 +33,8 @@ export type ViewState =
 export class TimelineView extends ItemView {
   plugin: KnoxTimelinePlugin;
   state: ViewState = { kind: "loading" };
+  private monthCursor: Date | null = null;
+  private lastMonthVisible = false;
 
   constructor(leaf: WorkspaceLeaf, plugin: KnoxTimelinePlugin) {
     super(leaf);
@@ -66,6 +68,12 @@ export class TimelineView extends ItemView {
     root.addClass("knox-tl-root");
 
     this.renderHeader(root);
+
+    if (this.plugin.settings.monthCalendarVisible) {
+      this.renderMonthCalendar(root);
+    } else {
+      this.lastMonthVisible = false;
+    }
 
     switch (this.state.kind) {
       case "loading":
@@ -115,11 +123,24 @@ export class TimelineView extends ItemView {
     const spacer = header.createDiv({ cls: "knox-tl-header-spacer" });
     spacer.toString();
 
+    const monthOn = this.plugin.settings.monthCalendarVisible;
+    const monthBtn = header.createEl("button", {
+      cls: "knox-tl-icon-btn" + (monthOn ? " is-active" : ""),
+    });
+    setIcon(monthBtn, "calendar-days");
+    monthBtn.setAttr("aria-label", monthOn ? "Hide month calendar" : "Show month calendar");
+    monthBtn.onclick = () => this.plugin.toggleMonthCalendar();
+
     const showing = this.plugin.showHiddenEvents;
     const eyeBtn = header.createEl("button", { cls: "knox-tl-icon-btn" });
     setIcon(eyeBtn, showing ? "eye" : "eye-off");
     eyeBtn.setAttr("aria-label", showing ? "Hide hidden events" : "Show hidden events");
     eyeBtn.onclick = () => this.plugin.toggleShowHidden();
+
+    const settingsBtn = header.createEl("button", { cls: "knox-tl-icon-btn" });
+    setIcon(settingsBtn, "settings");
+    settingsBtn.setAttr("aria-label", "Open Knox Timeline settings");
+    settingsBtn.onclick = () => this.plugin.openSettings();
 
     const refreshBtn = header.createEl("button", { cls: "knox-tl-icon-btn" });
     setIcon(refreshBtn, "refresh-cw");
@@ -139,6 +160,77 @@ export class TimelineView extends ItemView {
     } else {
       const retry = banner.createEl("button", { text: "Retry", cls: "knox-tl-banner-link" });
       retry.onclick = () => this.plugin.requestRefresh();
+    }
+  }
+
+  private renderMonthCalendar(root: HTMLElement): void {
+    const anchor = this.plugin.daysInWindow()[0];
+    const today = new Date();
+    const weekStart = this.plugin.settings.weekStartsOn ?? 0;
+
+    // Reset cursor to anchor's month when calendar is freshly opened.
+    // After that, prev/next navigation moves freely without auto-resetting.
+    if (!this.lastMonthVisible || !this.monthCursor) {
+      this.monthCursor = startOfMonth(anchor);
+    }
+    this.lastMonthVisible = true;
+    const cursor = this.monthCursor;
+
+    const wrap = root.createDiv({ cls: "knox-tl-month" });
+
+    const head = wrap.createDiv({ cls: "knox-tl-month-head" });
+    const prev = head.createEl("button", { cls: "knox-tl-icon-btn" });
+    setIcon(prev, "chevron-left");
+    prev.setAttr("aria-label", "Previous month");
+    prev.onclick = () => {
+      this.monthCursor = new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1);
+      this.render();
+    };
+
+    const label = head.createDiv({ cls: "knox-tl-month-label" });
+    label.setText(formatMonthYear(cursor));
+
+    const next = head.createEl("button", { cls: "knox-tl-icon-btn" });
+    setIcon(next, "chevron-right");
+    next.setAttr("aria-label", "Next month");
+    next.onclick = () => {
+      this.monthCursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+      this.render();
+    };
+
+    const grid = wrap.createDiv({ cls: "knox-tl-month-grid" });
+
+    const dowLabels =
+      weekStart === 1
+        ? ["M", "T", "W", "T", "F", "S", "S"]
+        : ["S", "M", "T", "W", "T", "F", "S"];
+    for (const dow of dowLabels) {
+      grid.createDiv({ cls: "knox-tl-month-dow", text: dow });
+    }
+
+    const firstOfMonth = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    const offsetFromWeekStart =
+      weekStart === 1
+        ? (firstOfMonth.getDay() + 6) % 7
+        : firstOfMonth.getDay();
+    const gridStart = new Date(
+      firstOfMonth.getFullYear(),
+      firstOfMonth.getMonth(),
+      1 - offsetFromWeekStart,
+    );
+
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(
+        gridStart.getFullYear(),
+        gridStart.getMonth(),
+        gridStart.getDate() + i,
+      );
+      const cell = grid.createDiv({ cls: "knox-tl-month-day" });
+      cell.setText(String(d.getDate()));
+      if (d.getMonth() !== cursor.getMonth()) cell.addClass("is-other-month");
+      if (sameDay(d, today)) cell.addClass("is-today");
+      if (sameDay(d, anchor)) cell.addClass("is-selected");
+      cell.onclick = () => this.plugin.setAnchor(d);
     }
   }
 
@@ -169,7 +261,10 @@ export class TimelineView extends ItemView {
 
     const days = this.plugin.daysInWindow();
 
-    const headers = root.createDiv({ cls: "knox-tl-day-headers" });
+    const scroll = root.createDiv({ cls: "knox-tl-scroll" });
+    const stickyHead = scroll.createDiv({ cls: "knox-tl-sticky-head" });
+
+    const headers = stickyHead.createDiv({ cls: "knox-tl-day-headers" });
     headers.createDiv({ cls: "knox-tl-axis-cell" });
     for (let i = 0; i < days.length; i++) {
       const cell = headers.createDiv({ cls: "knox-tl-day-header knox-tl-day-header-clickable" });
@@ -184,7 +279,7 @@ export class TimelineView extends ItemView {
       };
     }
 
-    const strip = root.createDiv({ cls: "knox-tl-all-day-strip" });
+    const strip = stickyHead.createDiv({ cls: "knox-tl-all-day-strip" });
     strip.createDiv({ cls: "knox-tl-axis-cell knox-tl-all-day-axis", text: "all-day" });
     for (const day of days) {
       const cell = strip.createDiv({ cls: "knox-tl-all-day-cell" });
@@ -194,7 +289,6 @@ export class TimelineView extends ItemView {
       for (const e of allDay) this.renderAllDayPill(cell, e, calendarMap);
     }
 
-    const scroll = root.createDiv({ cls: "knox-tl-scroll" });
     const tl = scroll.createDiv({ cls: "knox-tl-grid" });
     tl.style.height = `${TIMELINE_HEIGHT}px`;
 
@@ -470,6 +564,22 @@ function sameDay(a: Date, b: Date): boolean {
     a.getMonth() === b.getMonth() &&
     a.getDate() === b.getDate()
   );
+}
+
+function sameMonth(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
+}
+
+function startOfMonth(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+function formatMonthYear(d: Date): string {
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ];
+  return `${months[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 interface EventLayout {

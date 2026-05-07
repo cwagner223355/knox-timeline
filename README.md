@@ -41,7 +41,9 @@ Knox Timeline is not yet in the Community plugins directory.
 | Setting | Type | Default | Description |
 |---|---|---|---|
 | Fastmail username | text | empty | Your full Fastmail email address. |
-| Fastmail app password | password | empty | App password with Calendars (CalDAV) access. Stored in `data.json`; see security notes below. |
+| Fastmail app password | secret | empty | App password with Calendars (CalDAV) access. Stored in Obsidian's SecretStorage; see security notes below. |
+| First day of week | dropdown | Sunday | Sunday or Monday — controls the leftmost column in the month calendar. |
+| External iCal URLs | list | empty | Read-only iCal feeds (Google Calendar secret URL, iCloud public calendar, Outlook published calendar, etc.). Each has name, URL, color, and an enabled toggle. |
 | Default view | dropdown | Single day | Single day or today + tomorrow side-by-side. |
 | Enabled calendars | toggle list | all discovered | Which calendars to include in the timeline. |
 
@@ -57,19 +59,15 @@ Knox Timeline is not yet in the Community plugins directory.
 
 ## Security notes
 
-The Fastmail app password is currently stored in `.obsidian/plugins/knox-timeline/data.json` as plain text. If your vault syncs to the cloud (Obsidian Sync, iCloud, Dropbox, etc.), this file syncs with it. Two ways to handle this:
+The Fastmail app password is stored in Obsidian's [SecretStorage](https://docs.obsidian.md/plugins/guides/secret-storage) on the device where you entered it. It does not sync with your vault.
 
-- **Use a scoped app password** (recommended): the password gives access to Calendars (CalDAV) only, not your full Fastmail account. Revoke at any time from Fastmail settings.
-- **Exclude the plugin folder from sync** if you'd rather the password not leave the device.
-
-A future release will migrate credential storage to Obsidian's `SecretStorage` API, which keeps secrets out of `data.json`.
+Use a scoped Fastmail app password — give it Calendars (CalDAV) access only. You can revoke it at any time from Fastmail settings.
 
 Network traffic to `caldav.fastmail.com` is HTTPS only, so credentials are encrypted in transit.
 
 ## Known limitations
 
 - Read-only: events cannot be created or edited from the timeline.
-- Fastmail CalDAV only at present. Read-only iCal URL support (Google, iCloud, Outlook published calendars) is planned.
 - Desktop only. Mobile support is not planned for v1.
 
 ## License

@@ -1,7 +1,9 @@
 import { Notice, Plugin, WorkspaceLeaf } from "obsidian";
 import {
+  DEFAULT_FASTMAIL_SECRET_ID,
   DEFAULT_SETTINGS,
   type CalCalendar,
+  type CalEvent,
   type KnoxTimelineSettings,
   type ScheduleSnapshot,
   type ViewMode,
@@ -12,6 +14,7 @@ import {
   fetchCalendars,
   fetchEventsForCalendars,
 } from "./caldav";
+import { fetchIcalUrlEvents, icalCalendar } from "./ical-url";
 import { TimelineView, TIMELINE_VIEW_TYPE } from "./view";
 import { KnoxTimelineSettingTab } from "./settings";
 
@@ -73,10 +76,38 @@ export default class KnoxTimelinePlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const data = (await this.loadData()) as
+      | (KnoxTimelineSettings & { caldavPassword?: string })
+      | null;
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
+
+    // Migrate: legacy plaintext `caldavPassword` field → SecretStorage entry.
+    // Runs once per install; after migration the plaintext field is dropped from data.json.
+    const legacyPlaintext = data && (data as { caldavPassword?: string }).caldavPassword;
+    if (legacyPlaintext && !this.settings.caldavPasswordSecretId) {
+      try {
+        this.app.secretStorage.setSecret(DEFAULT_FASTMAIL_SECRET_ID, legacyPlaintext);
+        this.settings.caldavPasswordSecretId = DEFAULT_FASTMAIL_SECRET_ID;
+        delete (this.settings as Partial<KnoxTimelineSettings & { caldavPassword?: string }>)
+          .caldavPassword;
+        await this.saveSettings();
+        new Notice(
+          "Knox Timeline: your Fastmail password was moved to Obsidian's secret storage.",
+        );
+      } catch (e) {
+        console.warn("Knox Timeline: failed to migrate legacy password to SecretStorage:", e);
+      }
+    }
   }
   async saveSettings() {
     await this.saveData(this.settings);
+  }
+
+  /** Returns the resolved Fastmail password from SecretStorage, or empty string if unset. */
+  fastmailPassword(): string {
+    const id = this.settings.caldavPasswordSecretId;
+    if (!id) return "";
+    return this.app.secretStorage.getSecret(id) ?? "";
   }
 
   daysInWindow(): Date[] {
@@ -106,6 +137,17 @@ export default class KnoxTimelinePlugin extends Plugin {
   jumpToToday(): void {
     this.anchorDate = startOfDay(new Date());
     this.requestRefresh();
+  }
+
+  setAnchor(d: Date): void {
+    this.anchorDate = startOfDay(d);
+    this.requestRefresh();
+  }
+
+  toggleMonthCalendar(): void {
+    this.settings.monthCalendarVisible = !this.settings.monthCalendarVisible;
+    void this.saveSettings();
+    this.rerenderView();
   }
 
   setViewMode(mode: ViewMode): void {
@@ -179,79 +221,94 @@ export default class KnoxTimelinePlugin extends Plugin {
 
   private async runFetch(): Promise<void> {
     const view = this.getActiveView();
-    const { caldavUsername, caldavPassword } = this.settings;
+    const { caldavUsername } = this.settings;
+    const caldavPassword = this.fastmailPassword();
+    const hasFastmailCreds = !!(caldavUsername && caldavPassword);
+    const enabledIcalUrls = (this.settings.icalUrls ?? []).filter((c) => c.enabled);
 
-    if (!caldavUsername || !caldavPassword) {
+    if (!hasFastmailCreds && enabledIcalUrls.length === 0) {
       view?.applyState({
         kind: "error",
-        message: "Fastmail credentials not configured.",
+        message: "No calendars configured.",
         openSettings: true,
       });
-      return;
-    }
-    if (this.settings.enabledCalendarIds.length === 0 && this.settings.knownCalendarIds.length > 0) {
-      view?.applyState({ kind: "empty-no-calendars" });
       return;
     }
     if (view && !this.settings.cachedSnapshot) {
       view.applyState({ kind: "loading" });
     }
 
-    try {
-      const calendars = await fetchCalendars(caldavUsername, caldavPassword);
-      this.lastKnownCalendars = calendars;
+    const days = this.daysInWindow();
+    const windowStart = days[0];
+    const windowEnd = new Date(
+      days[days.length - 1].getFullYear(),
+      days[days.length - 1].getMonth(),
+      days[days.length - 1].getDate() + 1,
+    );
 
-      const knownIds = new Set(this.settings.knownCalendarIds);
-      const enabled = new Set(this.settings.enabledCalendarIds);
-      let added = false;
-      for (const c of calendars) {
-        if (!knownIds.has(c.id)) {
-          enabled.add(c.id);
-          knownIds.add(c.id);
-          added = true;
+    let fmCalendars: CalCalendar[] = [];
+    let fmEvents: CalEvent[] = [];
+    let fmError: Error | null = null;
+
+    if (hasFastmailCreds) {
+      try {
+        fmCalendars = await fetchCalendars(caldavUsername, caldavPassword);
+        this.lastKnownCalendars = fmCalendars;
+
+        const knownIds = new Set(this.settings.knownCalendarIds);
+        const enabled = new Set(this.settings.enabledCalendarIds);
+        let added = false;
+        for (const c of fmCalendars) {
+          if (!knownIds.has(c.id)) {
+            enabled.add(c.id);
+            knownIds.add(c.id);
+            added = true;
+          }
         }
+        if (added) {
+          this.settings.knownCalendarIds = [...knownIds];
+          this.settings.enabledCalendarIds = [...enabled];
+        }
+
+        const enabledCals = fmCalendars.filter((c) =>
+          this.settings.enabledCalendarIds.includes(c.id),
+        );
+        if (enabledCals.length > 0) {
+          fmEvents = await fetchEventsForCalendars(
+            caldavUsername,
+            caldavPassword,
+            enabledCals,
+            windowStart,
+            windowEnd,
+          );
+        }
+      } catch (e) {
+        fmError = e as Error;
       }
-      if (added) {
-        this.settings.knownCalendarIds = [...knownIds];
-        this.settings.enabledCalendarIds = [...enabled];
+    }
+
+    // iCal URL fetches: parallel, individual failures don't block the rest.
+    const icalResults = await Promise.allSettled(
+      enabledIcalUrls.map((c) => fetchIcalUrlEvents(c, windowStart, windowEnd)),
+    );
+    const icalCalendars = enabledIcalUrls.map((c) => icalCalendar(c));
+    const icalEvents: CalEvent[] = [];
+    for (let i = 0; i < icalResults.length; i++) {
+      const r = icalResults[i];
+      if (r.status === "fulfilled") {
+        icalEvents.push(...r.value);
+      } else {
+        console.warn(
+          `Knox Timeline: iCal fetch failed for "${enabledIcalUrls[i].name}":`,
+          r.reason,
+        );
       }
-      if (this.settings.enabledCalendarIds.length === 0) {
-        view?.applyState({ kind: "empty-no-calendars" });
-        return;
-      }
+    }
 
-      const enabledCals = calendars.filter((c) => this.settings.enabledCalendarIds.includes(c.id));
-
-      const days = this.daysInWindow();
-      const windowStart = days[0];
-      const windowEnd = new Date(
-        days[days.length - 1].getFullYear(),
-        days[days.length - 1].getMonth(),
-        days[days.length - 1].getDate() + 1,
-      );
-
-      const events = await fetchEventsForCalendars(
-        caldavUsername,
-        caldavPassword,
-        enabledCals,
-        windowStart,
-        windowEnd,
-      );
-
-      const snapshot: ScheduleSnapshot = {
-        fetchedAt: Date.now(),
-        windowStart: windowStart.getTime(),
-        windowEnd: windowEnd.getTime(),
-        events,
-        calendars,
-      };
-      this.settings.cachedSnapshot = snapshot;
-      await this.saveSettings();
-
-      this.getActiveView()?.applyState({ kind: "ok", snapshot });
-    } catch (e) {
+    // If Fastmail failed and that's the user's only configured source, surface the Fastmail error.
+    if (fmError && enabledIcalUrls.length === 0) {
       const cached = this.settings.cachedSnapshot;
-      if (e instanceof CalDavAuthError) {
+      if (fmError instanceof CalDavAuthError) {
         if (cached) {
           this.getActiveView()?.applyState({
             kind: "error-cached",
@@ -267,7 +324,10 @@ export default class KnoxTimelinePlugin extends Plugin {
         }
         new Notice("Knox Timeline: Fastmail rejected the credentials.");
       } else {
-        const msg = e instanceof CalDavNetworkError ? e.message : `Couldn't reach Fastmail: ${(e as Error).message}`;
+        const msg =
+          fmError instanceof CalDavNetworkError
+            ? fmError.message
+            : `Couldn't reach Fastmail: ${fmError.message}`;
         if (cached) {
           this.getActiveView()?.applyState({
             kind: "error-cached",
@@ -282,7 +342,32 @@ export default class KnoxTimelinePlugin extends Plugin {
           });
         }
       }
+      return;
     }
+
+    // Fastmail is configured but no calendars are enabled, and there are no iCal URLs to fall back on.
+    if (
+      hasFastmailCreds &&
+      !fmError &&
+      this.settings.knownCalendarIds.length > 0 &&
+      this.settings.enabledCalendarIds.length === 0 &&
+      icalCalendars.length === 0
+    ) {
+      view?.applyState({ kind: "empty-no-calendars" });
+      return;
+    }
+
+    const snapshot: ScheduleSnapshot = {
+      fetchedAt: Date.now(),
+      windowStart: windowStart.getTime(),
+      windowEnd: windowEnd.getTime(),
+      events: [...fmEvents, ...icalEvents],
+      calendars: [...fmCalendars, ...icalCalendars],
+    };
+    this.settings.cachedSnapshot = snapshot;
+    await this.saveSettings();
+
+    this.getActiveView()?.applyState({ kind: "ok", snapshot });
   }
 
   private getActiveView(): TimelineView | null {

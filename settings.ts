@@ -1,6 +1,8 @@
-import { App, Notice, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, PluginSettingTab, SecretComponent, Setting } from "obsidian";
 import type KnoxTimelinePlugin from "./main";
 import { CalDavAuthError, fetchCalendars } from "./caldav";
+import { IcalUrlModal } from "./ical-url-modal";
+import { DEFAULT_FASTMAIL_SECRET_ID, type IcalUrlConfig } from "./types";
 
 export class KnoxTimelineSettingTab extends PluginSettingTab {
   plugin: KnoxTimelinePlugin;
@@ -32,15 +34,16 @@ export class KnoxTimelineSettingTab extends PluginSettingTab {
       .setDesc(
         "Generate at Fastmail → Settings → Privacy & Security → App passwords. Give it Calendars (CalDAV) access only.",
       )
-      .addText((t) => {
-        t.inputEl.type = "password";
-        t.setPlaceholder("xxxx-xxxx-xxxx-xxxx")
-          .setValue(this.plugin.settings.caldavPassword)
+      .addComponent((el) =>
+        new SecretComponent(this.app, el)
+          .setValue(
+            this.plugin.settings.caldavPasswordSecretId || DEFAULT_FASTMAIL_SECRET_ID,
+          )
           .onChange(async (v) => {
-            this.plugin.settings.caldavPassword = v.trim();
+            this.plugin.settings.caldavPasswordSecretId = v;
             await this.plugin.saveSettings();
-          });
-      });
+          }),
+      );
 
     new Setting(containerEl)
       .setName("Default view")
@@ -52,6 +55,21 @@ export class KnoxTimelineSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.viewMode)
           .onChange(async (v) => {
             this.plugin.settings.viewMode = v as "single" | "two-day";
+            await this.plugin.saveSettings();
+            this.plugin.requestRefresh();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName("First day of week")
+      .setDesc("Sets the leftmost column in the month calendar.")
+      .addDropdown((d) =>
+        d
+          .addOption("0", "Sunday")
+          .addOption("1", "Monday")
+          .setValue(String(this.plugin.settings.weekStartsOn))
+          .onChange(async (v) => {
+            this.plugin.settings.weekStartsOn = v === "1" ? 1 : 0;
             await this.plugin.saveSettings();
             this.plugin.requestRefresh();
           }),
@@ -94,22 +112,66 @@ export class KnoxTimelineSettingTab extends PluginSettingTab {
       }
     }
 
-    if (this.plugin.settings.hiddenEvents.length > 0) {
-      containerEl.createEl("h3", { text: "Hidden events" });
-      for (const h of [...this.plugin.settings.hiddenEvents]) {
-        new Setting(containerEl).setName(h.title).setDesc(h.uid).addButton((b) =>
-          b.setButtonText("Unhide").onClick(async () => {
-            this.plugin.unhideEvent(h.uid);
-            await this.display();
-          }),
-        );
+    containerEl.createEl("h3", { text: "External iCal URLs" });
+    const icalDesc = containerEl.createEl("p");
+    icalDesc.setText(
+      "Add read-only iCal feeds (Google Calendar secret URL, iCloud public calendar, Outlook published calendar, etc.). Events appear in the timeline alongside Fastmail events.",
+    );
+
+    const icalUrls = this.plugin.settings.icalUrls ?? [];
+    if (icalUrls.length === 0) {
+      const empty = containerEl.createEl("p");
+      empty.setText("No iCal URLs added yet.");
+      empty.style.color = "var(--text-muted)";
+      empty.style.fontStyle = "italic";
+    } else {
+      for (const cfg of [...icalUrls]) {
+        new Setting(containerEl)
+          .setName(cfg.name)
+          .setDesc(truncateForDesc(cfg.url))
+          .addToggle((tog) =>
+            tog.setValue(cfg.enabled).onChange(async (on) => {
+              this.updateIcalUrl({ ...cfg, enabled: on });
+              await this.plugin.saveSettings();
+              this.plugin.requestRefresh();
+            }),
+          )
+          .addExtraButton((b) =>
+            b
+              .setIcon("pencil")
+              .setTooltip("Edit")
+              .onClick(() => this.openIcalUrlModal(cfg)),
+          )
+          .addExtraButton((b) =>
+            b
+              .setIcon("trash-2")
+              .setTooltip("Remove")
+              .onClick(async () => {
+                this.plugin.settings.icalUrls = (this.plugin.settings.icalUrls ?? []).filter(
+                  (c) => c.id !== cfg.id,
+                );
+                await this.plugin.saveSettings();
+                this.plugin.requestRefresh();
+                await this.display();
+              }),
+          );
       }
     }
+
+    new Setting(containerEl)
+      .setName("Add iCal URL")
+      .setDesc("Paste a public or secret .ics URL.")
+      .addButton((b) =>
+        b
+          .setButtonText("Add")
+          .setCta()
+          .onClick(() => this.openIcalUrlModal(null)),
+      );
 
     containerEl.createEl("h3", { text: "Notes" });
     const notes = containerEl.createEl("p");
     notes.setText(
-      "Plugin data lives at .obsidian/plugins/knox-timeline/data.json and includes your app password. If your vault syncs to the cloud, this file syncs with it. Add the folder to your sync exclusions if that's a concern.",
+      "Your Fastmail app password is stored in Obsidian's secret storage and stays on this device — it does not sync with your vault.",
     );
     const sec = containerEl.createEl("p");
     sec.setText(
@@ -117,8 +179,26 @@ export class KnoxTimelineSettingTab extends PluginSettingTab {
     );
   }
 
+  private openIcalUrlModal(initial: IcalUrlConfig | null): void {
+    new IcalUrlModal(this.app, initial, async (cfg) => {
+      this.updateIcalUrl(cfg);
+      await this.plugin.saveSettings();
+      this.plugin.requestRefresh();
+      await this.display();
+    }).open();
+  }
+
+  private updateIcalUrl(cfg: IcalUrlConfig): void {
+    const list = [...(this.plugin.settings.icalUrls ?? [])];
+    const idx = list.findIndex((c) => c.id === cfg.id);
+    if (idx >= 0) list[idx] = cfg;
+    else list.push(cfg);
+    this.plugin.settings.icalUrls = list;
+  }
+
   private async refreshCalendarList(): Promise<void> {
-    const { caldavUsername, caldavPassword } = this.plugin.settings;
+    const { caldavUsername } = this.plugin.settings;
+    const caldavPassword = this.plugin.fastmailPassword();
     if (!caldavUsername || !caldavPassword) {
       new Notice("Knox Timeline: enter username and app password first.");
       return;
@@ -147,4 +227,9 @@ export class KnoxTimelineSettingTab extends PluginSettingTab {
       }
     }
   }
+}
+
+function truncateForDesc(s: string): string {
+  if (s.length <= 60) return s;
+  return s.slice(0, 30) + "…" + s.slice(-25);
 }
