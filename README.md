@@ -6,7 +6,7 @@ A BusyCal-style timeline view of your Fastmail calendar in an Obsidian sidebar l
 
 ## Why this exists
 
-I rely on BusyCal's two-day timeline view for daily planning, but I do most of my note-taking in Obsidian. Existing Obsidian calendar plugins lean toward month grids or to-do lists, neither of which answer "what does my day actually look like." Knox Timeline brings the timeline format into Obsidian's right sidebar, sourced from Fastmail via CalDAV, and lets me turn any event into a meeting note with one click.
+I really like the two day timeline view for daily planning and meeting prep, but I do most of my note-taking in Obsidian. Existing Obsidian calendar plugins lean toward month grids or to-do lists, neither of which answer "what does my day actually look like." Knox Timeline brings the timeline format into Obsidian's right sidebar, sourced from Fastmail via CalDAV, and lets me turn any event into a meeting note with one click.
 
 ## Features
 
