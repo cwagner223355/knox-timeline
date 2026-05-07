@@ -2,7 +2,7 @@
 
 A BusyCal-style timeline view of your Fastmail calendar in an Obsidian sidebar leaf, with one-click meeting note creation.
 
-![Knox Timeline panel](assets/Knox%20Timeline%20Screenshot.png)
+![Knox Timeline panel](assets/knox-timeline-screenshot.png)
 
 ## Why this exists
 
