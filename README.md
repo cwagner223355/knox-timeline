@@ -70,6 +70,13 @@ Network traffic to `caldav.fastmail.com` is HTTPS only, so credentials are encry
 - Read-only: events cannot be created or edited from the timeline.
 - Desktop only. Mobile support is not planned for v1.
 
+## Support
+
+If Recent Edits is useful to you, consider buying me a coffee:
+
+<a href='https://ko-fi.com/S6S6Z9TE1' target='_blank'><img height='36' style='border:0px;height:36px;' src='https://storage.ko-fi.com/cdn/kofi2.png?v=3' border='0' alt='Buy Me a Coffee at ko-fi.com' /></a>
+
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
