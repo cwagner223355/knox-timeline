@@ -26,6 +26,7 @@ export default class KnoxTimelinePlugin extends Plugin {
   showHiddenEvents = false;
   private anchorDate: Date = startOfDay(new Date());
   private midnightTimer: number | null = null;
+  private nowLineTimer: number | null = null;
   private fetchInFlight: Promise<void> | null = null;
 
   async onload() {
@@ -65,6 +66,7 @@ export default class KnoxTimelinePlugin extends Plugin {
       void this.activateView();
       void this.requestRefresh();
       this.scheduleMidnightTimer();
+      this.scheduleNowLineTimer();
     });
   }
 
@@ -72,6 +74,10 @@ export default class KnoxTimelinePlugin extends Plugin {
     if (this.midnightTimer !== null) {
       window.clearTimeout(this.midnightTimer);
       this.midnightTimer = null;
+    }
+    if (this.nowLineTimer !== null) {
+      window.clearInterval(this.nowLineTimer);
+      this.nowLineTimer = null;
     }
   }
 
@@ -375,6 +381,19 @@ export default class KnoxTimelinePlugin extends Plugin {
     if (leaves.length === 0) return null;
     const v = leaves[0].view;
     return v instanceof TimelineView ? v : null;
+  }
+
+  scheduleNowLineTimer(): void {
+    if (this.nowLineTimer !== null) {
+      window.clearInterval(this.nowLineTimer);
+      this.nowLineTimer = null;
+    }
+    const minutes = this.settings.nowLineRefreshMinutes;
+    if (!minutes || minutes <= 0) return;
+    const intervalMs = minutes * 60 * 1000;
+    this.nowLineTimer = window.setInterval(() => {
+      this.getActiveView()?.tickNowLine();
+    }, intervalMs);
   }
 
   private scheduleMidnightTimer(): void {

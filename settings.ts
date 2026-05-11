@@ -76,6 +76,23 @@ export class KnoxTimelineSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
+      .setName("NOW Indicator Refresh")
+      .setDesc("How often the red current-time line repositions itself, in minutes. 0 disables auto-refresh. Default 10.")
+      .addText((t) => {
+        t.inputEl.type = "number";
+        t.inputEl.min = "0";
+        t.inputEl.step = "1";
+        t.setValue(String(this.plugin.settings.nowLineRefreshMinutes))
+          .onChange(async (v) => {
+            const parsed = parseInt(v, 10);
+            const next = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+            this.plugin.settings.nowLineRefreshMinutes = next;
+            await this.plugin.saveSettings();
+            this.plugin.scheduleNowLineTimer();
+          });
+      });
+
+    new Setting(containerEl)
       .setName("Refresh calendar list")
       .setDesc("Re-fetch the list of calendars from Fastmail. Run after entering credentials or after creating a new calendar.")
       .addButton((b) =>

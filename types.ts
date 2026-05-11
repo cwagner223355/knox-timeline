@@ -35,6 +35,7 @@ export interface KnoxTimelineSettings {
   monthCalendarVisible: boolean;
   weekStartsOn: WeekStart;
   icalUrls: IcalUrlConfig[];
+  nowLineRefreshMinutes: number;
   cachedSnapshot?: ScheduleSnapshot;
 }
 
@@ -51,6 +52,7 @@ export const DEFAULT_SETTINGS: KnoxTimelineSettings = {
   monthCalendarVisible: false,
   weekStartsOn: 0,
   icalUrls: [],
+  nowLineRefreshMinutes: 10,
 };
 
 export interface CalCalendar {

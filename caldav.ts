@@ -12,10 +12,16 @@ const NS_CALDAV = "urn:ietf:params:xml:ns:caldav";
 const NS_APPLE = "http://apple.com/ns/ical/";
 
 function basicAuth(username: string, password: string): string {
-  const encoded =
-    typeof btoa === "function"
-      ? btoa(`${username}:${password}`)
-      : Buffer.from(`${username}:${password}`).toString("base64");
+  const raw = `${username}:${password}`;
+  let encoded: string;
+  if (typeof btoa === "function") {
+    const bytes = new TextEncoder().encode(raw);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    encoded = btoa(bin);
+  } else {
+    encoded = Buffer.from(raw, "utf-8").toString("base64");
+  }
   return `Basic ${encoded}`;
 }
 

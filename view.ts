@@ -62,6 +62,17 @@ export class TimelineView extends ItemView {
     this.render();
   }
 
+  tickNowLine(): void {
+    const cols = this.containerEl.querySelectorAll(".knox-tl-day-col");
+    if (cols.length === 0) return;
+    const days = this.plugin.daysInWindow();
+    cols.forEach((col, idx) => {
+      if (idx >= days.length) return;
+      col.querySelectorAll(".knox-tl-now-line").forEach((el) => el.remove());
+      this.renderNowLine(col as HTMLElement, days[idx]);
+    });
+  }
+
   private render(): void {
     const root = this.containerEl.children[1] as HTMLElement;
     root.empty();
