@@ -116,7 +116,7 @@ export function participantNames(event: CalEvent): string[] {
 
 export function sanitizeTitle(t: string): string {
   const cleaned = t
-    .replace(/[\/\\:?*<>"|]/g, "-")
+    .replace(/[/\\:?*<>"|]/g, "-")
     .replace(/\s+/g, " ")
     .trim();
   return cleaned || "Untitled Event";
@@ -147,9 +147,9 @@ export function findVideoLink(event: CalEvent): { label: string; url: string } |
     }
   }
   const text = candidates.join(" ");
-  const urls = text.match(/https?:\/\/[^\s<>"'\)]+/g) ?? [];
+  const urls = text.match(/https?:\/\/[^\s<>"')]+/g) ?? [];
   for (const raw of urls) {
-    const url = raw.replace(/[.,;:!?\)\]]+$/, "");
+    const url = raw.replace(/[.,;:!?)\]]+$/, "");
     for (const v of VIDEO_HOSTS) {
       if (url.includes(v.host)) return { label: v.label, url };
     }

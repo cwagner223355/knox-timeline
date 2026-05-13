@@ -70,8 +70,11 @@ function parseXml(text: string): Document {
 }
 
 function getElementsByLocal(parent: ParentNode, ns: string, local: string): Element[] {
-  if (parent instanceof Document || parent instanceof Element) {
-    return Array.from(parent.getElementsByTagNameNS(ns, local));
+  const nodeType = (parent as Node).nodeType;
+  if (nodeType === 9 /* DOCUMENT_NODE */ || nodeType === 1 /* ELEMENT_NODE */) {
+    return Array.from(
+      (parent as Document | Element).getElementsByTagNameNS(ns, local),
+    );
   }
   return [];
 }

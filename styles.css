@@ -380,3 +380,6 @@
 .knox-hover-link { color: var(--text-accent); text-decoration: none; word-break: break-all; }
 .knox-hover-link:hover { text-decoration: underline; }
 .knox-hover-footer { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--background-modifier-border); text-align: right; }
+
+.knox-tl-empty-note { color: var(--text-muted); font-style: italic; }
+.knox-tl-event--lane-positioned { right: auto; }

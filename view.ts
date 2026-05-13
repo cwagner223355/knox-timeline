@@ -131,8 +131,7 @@ export class TimelineView extends ItemView {
     fwd.setAttr("aria-label", "Next day");
     fwd.onclick = () => this.plugin.shiftAnchor(1);
 
-    const spacer = header.createDiv({ cls: "knox-tl-header-spacer" });
-    spacer.toString();
+    header.createDiv({ cls: "knox-tl-header-spacer" });
 
     const monthOn = this.plugin.settings.monthCalendarVisible;
     const monthBtn = header.createEl("button", {
@@ -395,7 +394,7 @@ export class TimelineView extends ItemView {
       const lanePct = 100 / totalLanes;
       block.style.left = `calc(${lane * lanePct}% + 4px)`;
       block.style.width = `calc(${lanePct}% - 6px)`;
-      block.style.right = "auto";
+      block.addClass("knox-tl-event--lane-positioned");
     }
 
     if (this.plugin.isHidden(event.uid)) block.addClass("knox-event-hidden");
@@ -573,10 +572,6 @@ function sameDay(a: Date, b: Date): boolean {
     a.getMonth() === b.getMonth() &&
     a.getDate() === b.getDate()
   );
-}
-
-function sameMonth(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
 }
 
 function startOfMonth(d: Date): Date {

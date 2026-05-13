@@ -99,7 +99,7 @@ export class IcalUrlModal extends Modal {
       return;
     }
     const id = this.initialId ?? generateId();
-    this.onSubmit({
+    void this.onSubmit({
       id,
       name,
       url,
@@ -112,7 +112,7 @@ export class IcalUrlModal extends Modal {
 
 function generateId(): string {
   // Use crypto.randomUUID when available; fall back to a simple base-36 timestamp+random.
-  const c = (globalThis as unknown as { crypto?: { randomUUID?: () => string } }).crypto;
+  const c = (window as unknown as { crypto?: { randomUUID?: () => string } }).crypto;
   if (c?.randomUUID) return c.randomUUID();
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }

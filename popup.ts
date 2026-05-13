@@ -27,7 +27,7 @@ export function openEventPopup(
   closePopup();
 
   const popup = renderPopup(event, calendar);
-  document.body.appendChild(popup);
+  activeDocument.body.appendChild(popup);
   positionPopup(popup, anchor);
 
   const controller = new AbortController();
@@ -82,7 +82,7 @@ export function closePopup(): void {
 }
 
 function renderPopup(event: CalEvent, calendar: CalCalendar | undefined): HTMLElement {
-  const popup = document.createElement("div");
+  const popup = activeDocument.createElement("div");
   popup.className = "knox-hover-popup";
 
   const color = calendar?.color || "#7d7d7d";
