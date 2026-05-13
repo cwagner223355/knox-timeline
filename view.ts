@@ -272,6 +272,7 @@ export class TimelineView extends ItemView {
     const days = this.plugin.daysInWindow();
 
     const scroll = root.createDiv({ cls: "knox-tl-scroll" });
+    if (days.length > 1) scroll.addClass("is-multi-day");
     const stickyHead = scroll.createDiv({ cls: "knox-tl-sticky-head" });
 
     const headers = stickyHead.createDiv({ cls: "knox-tl-day-headers" });
