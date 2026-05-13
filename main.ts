@@ -70,7 +70,7 @@ export default class KnoxTimelinePlugin extends Plugin {
     });
   }
 
-  async onunload() {
+  onunload() {
     if (this.midnightTimer !== null) {
       window.clearTimeout(this.midnightTimer);
       this.midnightTimer = null;

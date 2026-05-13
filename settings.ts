@@ -12,7 +12,7 @@ export class KnoxTimelineSettingTab extends PluginSettingTab {
     this.plugin = plugin;
   }
 
-  async display(): Promise<void> {
+  display(): void {
     const { containerEl } = this;
     containerEl.empty();
 
@@ -98,11 +98,11 @@ export class KnoxTimelineSettingTab extends PluginSettingTab {
       .addButton((b) =>
         b.setButtonText("Refresh").onClick(async () => {
           await this.refreshCalendarList();
-          await this.display();
+          this.display();
         }),
       );
 
-    containerEl.createEl("h3", { text: "Enabled calendars" });
+    new Setting(containerEl).setName("Enabled calendars").setHeading();
 
     const known = this.plugin.lastKnownCalendars;
     if (known.length === 0) {
@@ -129,7 +129,7 @@ export class KnoxTimelineSettingTab extends PluginSettingTab {
       }
     }
 
-    containerEl.createEl("h3", { text: "External iCal URLs" });
+    new Setting(containerEl).setName("External iCal URLs").setHeading();
     const icalDesc = containerEl.createEl("p");
     icalDesc.setText(
       "Add read-only iCal feeds (Google Calendar secret URL, iCloud public calendar, Outlook published calendar, etc.). Events appear in the timeline alongside Fastmail events.",
@@ -137,10 +137,8 @@ export class KnoxTimelineSettingTab extends PluginSettingTab {
 
     const icalUrls = this.plugin.settings.icalUrls ?? [];
     if (icalUrls.length === 0) {
-      const empty = containerEl.createEl("p");
+      const empty = containerEl.createEl("p", { cls: "knox-tl-empty-note" });
       empty.setText("No iCal URLs added yet.");
-      empty.style.color = "var(--text-muted)";
-      empty.style.fontStyle = "italic";
     } else {
       for (const cfg of [...icalUrls]) {
         new Setting(containerEl)
@@ -169,7 +167,7 @@ export class KnoxTimelineSettingTab extends PluginSettingTab {
                 );
                 await this.plugin.saveSettings();
                 this.plugin.requestRefresh();
-                await this.display();
+                this.display();
               }),
           );
       }
@@ -185,7 +183,7 @@ export class KnoxTimelineSettingTab extends PluginSettingTab {
           .onClick(() => this.openIcalUrlModal(null)),
       );
 
-    containerEl.createEl("h3", { text: "Notes" });
+    new Setting(containerEl).setName("Notes").setHeading();
     const notes = containerEl.createEl("p");
     notes.setText(
       "Your Fastmail app password is stored in Obsidian's secret storage and stays on this device — it does not sync with your vault.",
@@ -201,7 +199,7 @@ export class KnoxTimelineSettingTab extends PluginSettingTab {
       this.updateIcalUrl(cfg);
       await this.plugin.saveSettings();
       this.plugin.requestRefresh();
-      await this.display();
+      this.display();
     }).open();
   }
 
