@@ -39,7 +39,7 @@ export default class KnoxTimelinePlugin extends Plugin {
     this.addCommand({
       id: "open-timeline-leaf",
       name: "Open Timeline",
-      callback: () => this.activateView(),
+      callback: () => { void this.activateView(); },
     });
     this.addCommand({
       id: "refresh-timeline",
@@ -166,13 +166,13 @@ export default class KnoxTimelinePlugin extends Plugin {
     const { workspace } = this.app;
     const existing = workspace.getLeavesOfType(TIMELINE_VIEW_TYPE);
     if (existing.length > 0) {
-      workspace.revealLeaf(existing[0]);
+      await workspace.revealLeaf(existing[0]);
       return;
     }
     const leaf: WorkspaceLeaf | null = workspace.getRightLeaf(false);
     if (!leaf) return;
     await leaf.setViewState({ type: TIMELINE_VIEW_TYPE, active: true });
-    workspace.revealLeaf(leaf);
+    await workspace.revealLeaf(leaf);
   }
 
   hideEvent(uid: string, title: string): void {

@@ -285,7 +285,6 @@ export class TimelineView extends ItemView {
       cell.onclick = () => {
         const ymd = formatYmd(day);
         const url = `busycalevent://date/${ymd}T12:00:00`;
-        console.log("Knox Timeline: opening BusyCal date URL", url);
         window.open(url);
       };
     }
@@ -500,7 +499,6 @@ export class TimelineView extends ItemView {
           .setIcon("plus")
           .onClick(() => {
             const url = `busycalevent://new/${encodeURIComponent(description)}`;
-            console.log("Knox Timeline: opening BusyCal new URL", url);
             window.open(url);
           }),
       );

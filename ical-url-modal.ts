@@ -10,12 +10,12 @@ export class IcalUrlModal extends Modal {
   private color: string;
   private enabled: boolean;
   private readonly initialId: string | null;
-  private readonly onSubmit: (cfg: IcalUrlConfig) => void;
+  private readonly onSubmit: (cfg: IcalUrlConfig) => void | Promise<void>;
 
   constructor(
     app: App,
     initial: IcalUrlConfig | null,
-    onSubmit: (cfg: IcalUrlConfig) => void,
+    onSubmit: (cfg: IcalUrlConfig) => void | Promise<void>,
   ) {
     super(app);
     this.name = initial?.name ?? "";
