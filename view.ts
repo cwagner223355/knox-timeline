@@ -11,6 +11,7 @@ import {
   hexToRgba,
 } from "./event-utils";
 import { noteExistsForEvent, openOrCreateNote } from "./note-creator";
+import { openOrCreateDailyNote } from "./daily-note";
 import { openEventPopup } from "./popup";
 
 export const TIMELINE_VIEW_TYPE = "knox-timeline";
@@ -281,11 +282,9 @@ export class TimelineView extends ItemView {
       const cell = headers.createDiv({ cls: "knox-tl-day-header knox-tl-day-header-clickable" });
       cell.setText(this.dayLabel(days[i]));
       const day = days[i];
-      cell.setAttr("aria-label", "Open this day in BusyCal");
+      cell.setAttr("aria-label", "Open daily note");
       cell.onclick = () => {
-        const ymd = formatYmd(day);
-        const url = `busycalevent://date/${ymd}T12:00:00`;
-        window.open(url);
+        void openOrCreateDailyNote(this.app, day);
       };
     }
 
