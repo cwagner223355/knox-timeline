@@ -2,7 +2,8 @@ import { App, Notice, PluginSettingTab, SecretComponent, Setting } from "obsidia
 import type KnoxTimelinePlugin from "./main";
 import { CalDavAuthError, fetchCalendars } from "./caldav";
 import { IcalUrlModal } from "./ical-url-modal";
-import { DEFAULT_FASTMAIL_SECRET_ID, type IcalUrlConfig } from "./types";
+import { DEFAULT_MEETING_TEMPLATE } from "./note-creator";
+import { DEFAULT_FASTMAIL_SECRET_ID, DEFAULT_SETTINGS, type IcalUrlConfig } from "./types";
 
 export class KnoxTimelineSettingTab extends PluginSettingTab {
   plugin: KnoxTimelinePlugin;
@@ -76,7 +77,7 @@ export class KnoxTimelineSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("NOW Indicator Refresh")
+      .setName("Now indicator refresh")
       .setDesc("How often the red current-time line repositions itself, in minutes. 0 disables auto-refresh. Default 10.")
       .addText((t) => {
         t.inputEl.type = "number";
@@ -183,10 +184,47 @@ export class KnoxTimelineSettingTab extends PluginSettingTab {
           .onClick(() => this.openIcalUrlModal(null)),
       );
 
+    new Setting(containerEl).setName("Meeting notes").setHeading();
+
+    new Setting(containerEl)
+      .setName("Meeting note folder")
+      .setDesc("Vault folder where notes created from an event are saved.")
+      .addText((t) =>
+        t
+          .setPlaceholder(DEFAULT_SETTINGS.meetingNoteFolder)
+          .setValue(this.plugin.settings.meetingNoteFolder)
+          .onChange(async (v) => {
+            this.plugin.settings.meetingNoteFolder =
+              v.trim() || DEFAULT_SETTINGS.meetingNoteFolder;
+            await this.plugin.saveSettings();
+          }),
+      );
+
+    new Setting(containerEl)
+      .setName("Meeting note template")
+      .setDesc(
+        "Body for new meeting notes. Placeholders: {{title}}, {{date}}, {{start_time}}, {{end_time}}, {{video_url}}, {{busycal_url}}, {{uid}}, {{daily_note}}. Leave blank for a simple default. Keep event_uid so a note can be matched back to its event.",
+      )
+      .addTextArea((t) => {
+        t.inputEl.rows = 8;
+        t.inputEl.addClass("knox-tl-template-input");
+        t
+          .setPlaceholder(DEFAULT_MEETING_TEMPLATE)
+          .setValue(this.plugin.settings.meetingNoteTemplate)
+          .onChange(async (v) => {
+            this.plugin.settings.meetingNoteTemplate = v;
+            await this.plugin.saveSettings();
+          });
+      });
+
     new Setting(containerEl).setName("Notes").setHeading();
     const notes = containerEl.createEl("p");
     notes.setText(
       "Your Fastmail app password is stored in Obsidian's secret storage and stays on this device — it does not sync with your vault.",
+    );
+    const cacheNote = containerEl.createEl("p");
+    cacheNote.setText(
+      "For offline display, the most recently fetched events (titles, times, attendees) are cached in this plugin's data.json. Unlike the password, that file does sync if your vault syncs.",
     );
     const sec = containerEl.createEl("p");
     sec.setText(

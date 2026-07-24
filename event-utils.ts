@@ -18,9 +18,16 @@ export function eventStartLocal(event: CalEvent): Date {
   if (event.showWithoutTime || !tz || tz === localTz) {
     return new Date(+y, +mo - 1, +d, +h, +mi, +s);
   }
-  const utcGuess = Date.UTC(+y, +mo - 1, +d, +h, +mi, +s);
-  const offsetMs = tzOffsetAt(utcGuess, tz);
-  return new Date(utcGuess - offsetMs);
+  try {
+    const utcGuess = Date.UTC(+y, +mo - 1, +d, +h, +mi, +s);
+    const offsetMs = tzOffsetAt(utcGuess, tz);
+    return new Date(utcGuess - offsetMs);
+  } catch {
+    // Non-IANA TZID (e.g. Windows zone names like "Eastern Standard Time" from
+    // Outlook feeds) makes Intl throw. Fall back to floating local time rather
+    // than letting one bad zone reject the whole feed.
+    return new Date(+y, +mo - 1, +d, +h, +mi, +s);
+  }
 }
 
 function tzOffsetAt(utcMs: number, tz: string): number {
@@ -48,14 +55,18 @@ export function eventDurationMs(event: CalEvent): number {
 }
 
 function parseIso8601Duration(s: string): number {
-  const m = s.match(/^(-)?P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/);
+  const m = s.match(
+    /^(-)?P(?:(\d+)W)?(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?)?$/,
+  );
   if (!m) return 0;
   const sign = m[1] === "-" ? -1 : 1;
-  const days = +(m[2] ?? 0);
-  const hours = +(m[3] ?? 0);
-  const mins = +(m[4] ?? 0);
-  const secs = parseFloat(m[5] ?? "0");
-  return sign * ((((days * 24 + hours) * 60 + mins) * 60 + secs) * 1000);
+  const weeks = +(m[2] ?? 0);
+  const days = +(m[3] ?? 0);
+  const hours = +(m[4] ?? 0);
+  const mins = +(m[5] ?? 0);
+  const secs = parseFloat(m[6] ?? "0");
+  const totalDays = weeks * 7 + days;
+  return sign * ((((totalDays * 24 + hours) * 60 + mins) * 60 + secs) * 1000);
 }
 
 export function eventEndLocal(event: CalEvent): Date {
@@ -95,25 +106,6 @@ export function formatYmd(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-export function participantCount(event: CalEvent): number {
-  if (!event.participants) return 0;
-  return Object.keys(event.participants).length;
-}
-
-const SELF_NAMES = new Set(["chris wagner", "christopher wagner"]);
-
-export function participantNames(event: CalEvent): string[] {
-  if (!event.participants) return [];
-  const out: string[] = [];
-  for (const p of Object.values(event.participants)) {
-    if (!p.name) continue;
-    if (p.name.includes("@")) continue;
-    if (SELF_NAMES.has(p.name.toLowerCase().trim())) continue;
-    out.push(p.name);
-  }
-  return out;
-}
-
 export function sanitizeTitle(t: string): string {
   const cleaned = t
     .replace(/[/\\:?*<>"|]/g, "-")
@@ -150,8 +142,18 @@ export function findVideoLink(event: CalEvent): { label: string; url: string } |
   const urls = text.match(/https?:\/\/[^\s<>"')]+/g) ?? [];
   for (const raw of urls) {
     const url = raw.replace(/[.,;:!?)\]]+$/, "");
+    let host: string;
+    try {
+      host = new URL(url).hostname.toLowerCase();
+    } catch {
+      continue;
+    }
     for (const v of VIDEO_HOSTS) {
-      if (url.includes(v.host)) return { label: v.label, url };
+      // Match the host exactly or a subdomain of it, so a decoy path or
+      // look-alike domain (e.g. "https://zoom.us.evil.tld") can't spoof it.
+      if (host === v.host || host.endsWith("." + v.host)) {
+        return { label: v.label, url };
+      }
     }
   }
   return null;

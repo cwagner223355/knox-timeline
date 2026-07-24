@@ -15,7 +15,7 @@ import {
   fetchEventsForCalendars,
 } from "./caldav";
 import { fetchIcalUrlEvents, icalCalendar } from "./ical-url";
-import { TimelineView, TIMELINE_VIEW_TYPE } from "./view";
+import { TimelineView, TIMELINE_VIEW_TYPE, type ViewState } from "./view";
 import { KnoxTimelineSettingTab } from "./settings";
 
 const STALE_AFTER_MS = 5 * 60 * 1000;
@@ -28,6 +28,7 @@ export default class KnoxTimelinePlugin extends Plugin {
   private midnightTimer: number | null = null;
   private nowLineTimer: number | null = null;
   private fetchInFlight: Promise<void> | null = null;
+  private refreshQueued = false;
 
   async onload() {
     await this.loadSettings();
@@ -38,12 +39,12 @@ export default class KnoxTimelinePlugin extends Plugin {
 
     this.addCommand({
       id: "open-timeline-leaf",
-      name: "Open Timeline",
+      name: "Open panel",
       callback: () => { void this.activateView(); },
     });
     this.addCommand({
       id: "refresh-timeline",
-      name: "Refresh Timeline",
+      name: "Refresh",
       callback: () => this.requestRefresh(),
     });
     this.addCommand({
@@ -63,8 +64,14 @@ export default class KnoxTimelinePlugin extends Plugin {
     });
 
     this.app.workspace.onLayoutReady(() => {
-      void this.activateView();
-      void this.requestRefresh();
+      // Only force the panel open on first install. On later launches Obsidian
+      // restores the leaf if the user had it open; if they closed it, respect that.
+      if (!this.settings.hasAutoOpened) {
+        this.settings.hasAutoOpened = true;
+        void this.saveSettings();
+        void this.activateView();
+      }
+      this.requestRefresh();
       this.scheduleMidnightTimer();
       this.scheduleNowLineTimer();
     });
@@ -85,7 +92,7 @@ export default class KnoxTimelinePlugin extends Plugin {
     const data = (await this.loadData()) as
       | (KnoxTimelineSettings & { caldavPassword?: string })
       | null;
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
+    this.settings = Object.assign(structuredClone(DEFAULT_SETTINGS), data);
 
     // Migrate: legacy plaintext `caldavPassword` field → SecretStorage entry.
     // Runs once per install; after migration the plaintext field is dropped from data.json.
@@ -111,8 +118,10 @@ export default class KnoxTimelinePlugin extends Plugin {
 
   /** Returns the resolved Fastmail password from SecretStorage, or empty string if unset. */
   fastmailPassword(): string {
-    const id = this.settings.caldavPasswordSecretId;
-    if (!id) return "";
+    // Fall back to the default secret id: the settings component is seeded with
+    // it, so a first-time user can store a password before the id is persisted
+    // into settings, and we should still find it.
+    const id = this.settings.caldavPasswordSecretId || DEFAULT_FASTMAIL_SECRET_ID;
     return this.app.secretStorage.getSecret(id) ?? "";
   }
 
@@ -137,16 +146,26 @@ export default class KnoxTimelinePlugin extends Plugin {
       this.anchorDate.getMonth(),
       this.anchorDate.getDate() + deltaDays,
     );
-    this.requestRefresh();
+    this.onAnchorChanged();
   }
 
   jumpToToday(): void {
     this.anchorDate = startOfDay(new Date());
-    this.requestRefresh();
+    this.onAnchorChanged();
   }
 
   setAnchor(d: Date): void {
     this.anchorDate = startOfDay(d);
+    this.onAnchorChanged();
+  }
+
+  /**
+   * Re-render the visible window from cache immediately so the header and day
+   * columns track the new anchor even while the fresh fetch is still running,
+   * then kick off (or queue) that fetch.
+   */
+  private onAnchorChanged(): void {
+    this.rerenderView();
     this.requestRefresh();
   }
 
@@ -194,7 +213,7 @@ export default class KnoxTimelinePlugin extends Plugin {
   rerenderView(): void {
     const cache = this.settings.cachedSnapshot;
     if (!cache) return;
-    this.getActiveView()?.applyState({ kind: "ok", snapshot: cache });
+    this.applyToAllViews({ kind: "ok", snapshot: cache });
   }
   toggleShowHidden(): void {
     this.showHiddenEvents = !this.showHiddenEvents;
@@ -214,34 +233,58 @@ export default class KnoxTimelinePlugin extends Plugin {
       view.applyState({ kind: "ok", snapshot: cache });
     }
     if (!cache || Date.now() - cache.fetchedAt > STALE_AFTER_MS) {
-      void this.requestRefresh();
+      this.requestRefresh();
     }
   }
 
   requestRefresh(): void {
-    if (this.fetchInFlight) return;
+    // Coalesce refreshes: if a fetch is already running, remember that another
+    // was asked for and run exactly one more once it settles. Without this,
+    // rapid day navigation drops requests and the view keeps the old window.
+    if (this.fetchInFlight) {
+      this.refreshQueued = true;
+      return;
+    }
+    this.startFetch();
+  }
+
+  private startFetch(): void {
     this.fetchInFlight = this.runFetch().finally(() => {
       this.fetchInFlight = null;
+      if (this.refreshQueued) {
+        this.refreshQueued = false;
+        this.startFetch();
+      }
     });
   }
 
+  private allViews(): TimelineView[] {
+    return this.app.workspace
+      .getLeavesOfType(TIMELINE_VIEW_TYPE)
+      .map((l) => l.view)
+      .filter((v): v is TimelineView => v instanceof TimelineView);
+  }
+
+  private applyToAllViews(state: ViewState): void {
+    for (const v of this.allViews()) v.applyState(state);
+  }
+
   private async runFetch(): Promise<void> {
-    const view = this.getActiveView();
     const { caldavUsername } = this.settings;
     const caldavPassword = this.fastmailPassword();
     const hasFastmailCreds = !!(caldavUsername && caldavPassword);
     const enabledIcalUrls = (this.settings.icalUrls ?? []).filter((c) => c.enabled);
 
     if (!hasFastmailCreds && enabledIcalUrls.length === 0) {
-      view?.applyState({
+      this.applyToAllViews({
         kind: "error",
         message: "No calendars configured.",
         openSettings: true,
       });
       return;
     }
-    if (view && !this.settings.cachedSnapshot) {
-      view.applyState({ kind: "loading" });
+    if (!this.settings.cachedSnapshot) {
+      this.applyToAllViews({ kind: "loading" });
     }
 
     const days = this.daysInWindow();
@@ -299,11 +342,13 @@ export default class KnoxTimelinePlugin extends Plugin {
     );
     const icalCalendars = enabledIcalUrls.map((c) => icalCalendar(c));
     const icalEvents: CalEvent[] = [];
+    let icalFailureCount = 0;
     for (let i = 0; i < icalResults.length; i++) {
       const r = icalResults[i];
       if (r.status === "fulfilled") {
         icalEvents.push(...r.value);
       } else {
+        icalFailureCount++;
         console.warn(
           `Knox Timeline: iCal fetch failed for "${enabledIcalUrls[i].name}":`,
           r.reason,
@@ -311,47 +356,50 @@ export default class KnoxTimelinePlugin extends Plugin {
       }
     }
 
-    // If Fastmail failed and that's the user's only configured source, surface the Fastmail error.
-    if (fmError && enabledIcalUrls.length === 0) {
+    const fastmailFailed = hasFastmailCreds && !!fmError;
+    const icalAllFailed =
+      enabledIcalUrls.length > 0 && icalFailureCount === enabledIcalUrls.length;
+
+    // No usable data this round: either the primary source (Fastmail) failed, or
+    // Fastmail isn't configured and every iCal feed failed. Keep the last good
+    // cache and show a banner. Never overwrite it with a partial or empty
+    // snapshot, which would silently blank out the user's meetings.
+    if (fastmailFailed || (!hasFastmailCreds && icalAllFailed)) {
       const cached = this.settings.cachedSnapshot;
-      if (fmError instanceof CalDavAuthError) {
-        if (cached) {
-          this.getActiveView()?.applyState({
-            kind: "error-cached",
-            message: "Invalid Fastmail credentials · Open Settings",
-            snapshot: cached,
-          });
-        } else {
-          this.getActiveView()?.applyState({
-            kind: "error",
-            message: "Invalid Fastmail credentials",
-            openSettings: true,
-          });
-        }
-        new Notice("Knox Timeline: Fastmail rejected the credentials.");
-      } else {
-        const msg =
-          fmError instanceof CalDavNetworkError
+      const isAuth = fmError instanceof CalDavAuthError;
+      if (fastmailFailed) {
+        new Notice(
+          isAuth
+            ? "Knox Timeline: Fastmail rejected the credentials."
+            : "Knox Timeline: couldn't reach Fastmail.",
+        );
+      }
+      if (cached) {
+        const shortMsg = fastmailFailed
+          ? isAuth
+            ? "Invalid Fastmail credentials · Open Settings"
+            : "Couldn't reach Fastmail"
+          : "Couldn't refresh calendars";
+        this.applyToAllViews({ kind: "error-cached", message: shortMsg, snapshot: cached });
+      } else if (fastmailFailed) {
+        const msg = isAuth
+          ? "Invalid Fastmail credentials"
+          : fmError instanceof CalDavNetworkError
             ? fmError.message
-            : `Couldn't reach Fastmail: ${fmError.message}`;
-        if (cached) {
-          this.getActiveView()?.applyState({
-            kind: "error-cached",
-            message: "Couldn't reach Fastmail",
-            snapshot: cached,
-          });
-        } else {
-          this.getActiveView()?.applyState({
-            kind: "error",
-            message: msg,
-            openSettings: false,
-          });
-        }
+            : `Couldn't reach Fastmail: ${fmError?.message ?? "unknown error"}`;
+        this.applyToAllViews({ kind: "error", message: msg, openSettings: isAuth });
+      } else {
+        this.applyToAllViews({
+          kind: "error",
+          message: "Couldn't reach any calendar feed.",
+          openSettings: false,
+        });
       }
       return;
     }
 
-    // Fastmail is configured but no calendars are enabled, and there are no iCal URLs to fall back on.
+    // Fastmail is configured and healthy but no calendars are enabled, and there
+    // are no iCal URLs to fall back on.
     if (
       hasFastmailCreds &&
       !fmError &&
@@ -359,7 +407,7 @@ export default class KnoxTimelinePlugin extends Plugin {
       this.settings.enabledCalendarIds.length === 0 &&
       icalCalendars.length === 0
     ) {
-      view?.applyState({ kind: "empty-no-calendars" });
+      this.applyToAllViews({ kind: "empty-no-calendars" });
       return;
     }
 
@@ -373,14 +421,17 @@ export default class KnoxTimelinePlugin extends Plugin {
     this.settings.cachedSnapshot = snapshot;
     await this.saveSettings();
 
-    this.getActiveView()?.applyState({ kind: "ok", snapshot });
-  }
-
-  private getActiveView(): TimelineView | null {
-    const leaves = this.app.workspace.getLeavesOfType(TIMELINE_VIEW_TYPE);
-    if (leaves.length === 0) return null;
-    const v = leaves[0].view;
-    return v instanceof TimelineView ? v : null;
+    // Primary source succeeded. If some (but not all) iCal feeds failed, show the
+    // fresh data with a non-blocking retry banner rather than hiding the failure.
+    if (icalFailureCount > 0) {
+      this.applyToAllViews({
+        kind: "error-cached",
+        message: "Some calendar feeds couldn't be refreshed",
+        snapshot,
+      });
+    } else {
+      this.applyToAllViews({ kind: "ok", snapshot });
+    }
   }
 
   scheduleNowLineTimer(): void {
@@ -392,7 +443,7 @@ export default class KnoxTimelinePlugin extends Plugin {
     if (!minutes || minutes <= 0) return;
     const intervalMs = minutes * 60 * 1000;
     this.nowLineTimer = window.setInterval(() => {
-      this.getActiveView()?.tickNowLine();
+      for (const v of this.allViews()) v.tickNowLine();
     }, intervalMs);
   }
 
@@ -412,7 +463,21 @@ export default class KnoxTimelinePlugin extends Plugin {
     );
     const delay = nextMidnight.getTime() - now.getTime();
     this.midnightTimer = window.setTimeout(() => {
-      this.requestRefresh();
+      // The day just rolled over. If the user was still looking at the day that
+      // just ended (i.e. hadn't navigated away), advance the anchor to the new
+      // today; otherwise just re-fetch and relabel wherever they are.
+      const newToday = startOfDay(new Date());
+      const justEnded = new Date(
+        newToday.getFullYear(),
+        newToday.getMonth(),
+        newToday.getDate() - 1,
+      );
+      if (this.anchorDate.getTime() === justEnded.getTime()) {
+        this.jumpToToday();
+      } else {
+        this.rerenderView();
+        this.requestRefresh();
+      }
       this.scheduleMidnightTimer();
     }, delay);
   }

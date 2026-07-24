@@ -7,12 +7,13 @@ import {
   eventStartLocal,
   eventTouchesDay,
   findVideoLink,
+  formatTime,
   formatYmd,
   hexToRgba,
 } from "./event-utils";
 import { noteExistsForEvent, openOrCreateNote } from "./note-creator";
 import { openOrCreateDailyNote } from "./daily-note";
-import { openEventPopup } from "./popup";
+import { closePopup, openEventPopup } from "./popup";
 
 export const TIMELINE_VIEW_TYPE = "knox-timeline";
 
@@ -56,11 +57,23 @@ export class TimelineView extends ItemView {
     this.render();
     this.plugin.onViewActivated(this);
   }
-  async onClose(): Promise<void> {}
+  async onClose(): Promise<void> {
+    // Tear down any open hover popup so its DOM node and window listeners don't
+    // leak when the leaf closes or the plugin unloads.
+    closePopup();
+  }
 
   applyState(state: ViewState): void {
     this.state = state;
     this.render();
+  }
+
+  private async openNote(event: CalEvent): Promise<void> {
+    await openOrCreateNote(this.app, event, {
+      folder: this.plugin.settings.meetingNoteFolder,
+      template: this.plugin.settings.meetingNoteTemplate,
+    });
+    this.plugin.rerenderView();
   }
 
   tickNowLine(): void {
@@ -326,10 +339,67 @@ export class TimelineView extends ItemView {
         .sort((a, b) => eventStartLocal(a).getTime() - eventStartLocal(b).getTime());
 
       const layouts = layoutWithLanes(dayEvents, day);
+      const earlier: CalEvent[] = [];
+      const later: CalEvent[] = [];
       for (const l of layouts) {
-        this.renderEventBlock(col, l.event, day, calendarMap, l.lane, l.totalLanes);
+        const pos = this.placeOnAxis(l.event, day);
+        if (pos === "above") earlier.push(l.event);
+        else if (pos === "below") later.push(l.event);
+        else if (pos === "in") {
+          this.renderEventBlock(col, l.event, day, calendarMap, l.lane, l.totalLanes);
+        }
       }
+      if (earlier.length) this.renderOverflowChip(col, earlier, "above");
+      if (later.length) this.renderOverflowChip(col, later, "below");
     }
+  }
+
+  /**
+   * Where the event falls relative to the visible axis: fully "above" (before
+   * the first hour), fully "below" (after the last hour), "in" range, or null
+   * when it has no positive duration on this day.
+   */
+  private placeOnAxis(event: CalEvent, day: Date): "above" | "below" | "in" | null {
+    const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, 0);
+    const dayEnd = new Date(dayStart.getTime() + 24 * 3600000);
+    const realStart = eventStartLocal(event);
+    const realEnd = eventEndLocal(event);
+    const effStart = realStart < dayStart ? dayStart : realStart;
+    const effEnd = realEnd > dayEnd ? dayEnd : realEnd;
+    const durMs = effEnd.getTime() - effStart.getTime();
+    if (durMs <= 0) return null;
+    const startHrFromMidnight = (effStart.getTime() - dayStart.getTime()) / 3600000;
+    const naturalTop = (startHrFromMidnight - AXIS_START_HOUR) * HOUR_HEIGHT;
+    const naturalBottom = naturalTop + (durMs / 3600000) * HOUR_HEIGHT;
+    if (naturalBottom <= 0) return "above";
+    if (naturalTop >= TIMELINE_HEIGHT) return "below";
+    return "in";
+  }
+
+  private renderOverflowChip(col: HTMLElement, events: CalEvent[], where: "above" | "below"): void {
+    const chip = col.createDiv({ cls: `knox-tl-overflow-chip knox-tl-overflow-${where}` });
+    const arrow = where === "above" ? "↑" : "↓";
+    const word = where === "above" ? "earlier" : "later";
+    chip.setText(`${arrow} ${events.length} ${word}`);
+    chip.setAttr("aria-label", `${events.length} event(s) outside the visible hours (${word})`);
+    chip.onclick = (evt) => {
+      evt.stopPropagation();
+      const menu = new Menu();
+      for (const ev of events) {
+        const label = ev.showWithoutTime
+          ? ev.title || "(untitled)"
+          : `${formatTime(eventStartLocal(ev))} · ${ev.title || "(untitled)"}`;
+        menu.addItem((item) =>
+          item
+            .setTitle(label)
+            .setIcon("calendar-clock")
+            .onClick(() => {
+              void this.openNote(ev);
+            }),
+        );
+      }
+      menu.showAtMouseEvent(evt);
+    };
   }
 
   private renderNowLine(col: HTMLElement, day: Date): void {
@@ -414,7 +484,7 @@ export class TimelineView extends ItemView {
     const line1 = body.createDiv({ cls: "knox-tl-event-line1" });
     const titleEl = line1.createDiv({ cls: "knox-tl-event-title" });
     titleEl.setText(event.title || "(untitled)");
-    if (noteExistsForEvent(this.app, event)) {
+    if (noteExistsForEvent(this.app, event, this.plugin.settings.meetingNoteFolder)) {
       titleEl.addClass("knox-tl-has-note");
     } else {
       titleEl.addClass("knox-tl-pending");
@@ -441,9 +511,8 @@ export class TimelineView extends ItemView {
       window.open(busyCalUrl(event));
     };
 
-    body.onclick = async () => {
-      await openOrCreateNote(this.app, event);
-      this.plugin.rerenderView();
+    body.onclick = () => {
+      void this.openNote(event);
     };
 
     this.attachHideMenu(block, event);
@@ -463,9 +532,8 @@ export class TimelineView extends ItemView {
     pill.style.color = color;
     pill.setText(event.title || "(untitled)");
     if (this.plugin.isHidden(event.uid)) pill.addClass("knox-event-hidden");
-    pill.onclick = async () => {
-      await openOrCreateNote(this.app, event);
-      this.plugin.rerenderView();
+    pill.onclick = () => {
+      void this.openNote(event);
     };
     this.attachHideMenu(pill, event);
   }
@@ -480,9 +548,18 @@ export class TimelineView extends ItemView {
       const rect = col.getBoundingClientRect();
       const yInCol = evt.clientY - rect.top;
       const totalHour = AXIS_START_HOUR + yInCol / HOUR_HEIGHT;
-      const hour = Math.max(0, Math.min(23, Math.floor(totalHour)));
+      let hour = Math.max(0, Math.min(23, Math.floor(totalHour)));
       const rawMin = (totalHour - hour) * 60;
-      const minute = Math.max(0, Math.min(30, Math.round(rawMin / 30) * 30));
+      let minute = Math.round(rawMin / 30) * 30; // 0, 30, or 60
+      if (minute >= 60) {
+        // Round up past the hour instead of snapping backward to :30.
+        if (hour < 23) {
+          hour += 1;
+          minute = 0;
+        } else {
+          minute = 30;
+        }
+      }
 
       const clickDate = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hour, minute, 0);
       const timeLabel = formatClickTime(hour, minute);
@@ -535,14 +612,14 @@ export class TimelineView extends ItemView {
     const isToday = sameDay(day, today);
     const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
     const isTomorrow = sameDay(day, tomorrow);
-    const weekday = day.toLocaleDateString("en-US", { weekday: "short" });
+    const weekday = day.toLocaleDateString(undefined, { weekday: "short" });
     const dayNum = day.getDate();
     const ymd = formatYmd(day);
 
     if (this.plugin.settings.viewMode === "single") {
       if (isToday) return `Today · ${weekday} ${dayNum} (${ymd})`;
       if (isTomorrow) return `Tomorrow · ${weekday} ${dayNum} (${ymd})`;
-      const longWeekday = day.toLocaleDateString("en-US", { weekday: "long" });
+      const longWeekday = day.toLocaleDateString(undefined, { weekday: "long" });
       return `${longWeekday} (${ymd})`;
     }
     if (isToday) return `Today (${weekday} ${dayNum})`;

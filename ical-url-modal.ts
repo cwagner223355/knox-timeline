@@ -29,9 +29,7 @@ export class IcalUrlModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createEl("h3", {
-      text: this.initialId ? "Edit iCal URL" : "Add iCal URL",
-    });
+    this.setTitle(this.initialId ? "Edit iCal URL" : "Add iCal URL");
 
     new Setting(contentEl)
       .setName("Name")

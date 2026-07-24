@@ -139,12 +139,6 @@ function toCalDavUtc(d: Date): string {
   return `${y}${mo}${da}T${h}${mi}${s}Z`;
 }
 
-export function localWindow(days: number, now: Date = new Date()): { start: Date; end: Date } {
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
-  const end = new Date(start.getTime() + Math.max(1, days) * 24 * 60 * 60 * 1000);
-  return { start, end };
-}
-
 export async function fetchEventsForCalendar(
   username: string,
   password: string,
@@ -192,8 +186,27 @@ export async function fetchEventsForCalendars(
   windowStart: Date,
   windowEnd: Date,
 ): Promise<CalEvent[]> {
-  const results = await Promise.all(
+  const results = await Promise.allSettled(
     calendars.map((c) => fetchEventsForCalendar(username, password, c, windowStart, windowEnd)),
   );
-  return results.flat();
+  const events: CalEvent[] = [];
+  const errors: unknown[] = [];
+  results.forEach((r, i) => {
+    if (r.status === "fulfilled") {
+      events.push(...r.value);
+    } else {
+      errors.push(r.reason);
+      console.warn(
+        `Knox Timeline: failed to fetch calendar "${calendars[i].name}":`,
+        r.reason,
+      );
+    }
+  });
+  // One failing calendar no longer aborts the rest. But if every calendar
+  // failed, propagate the first error (preserving its CalDav* type) so the
+  // caller treats it as a real Fastmail failure and keeps the cached snapshot.
+  if (events.length === 0 && errors.length === calendars.length && errors.length > 0) {
+    throw errors[0];
+  }
+  return events;
 }

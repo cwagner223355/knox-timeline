@@ -1,10 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap');
-
 .knox-tl-root,
 .knox-tl-root *,
 .knox-hover-popup,
 .knox-hover-popup * {
-  font-family: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-interface);
 }
 
 .knox-tl-root {
@@ -383,3 +381,32 @@
 
 .knox-tl-empty-note { color: var(--text-muted); font-style: italic; }
 .knox-tl-event--lane-positioned { right: auto; }
+
+/* Chip surfacing events that fall outside the visible hour range */
+.knox-tl-overflow-chip {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  padding: 1px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.knox-tl-overflow-chip:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+.knox-tl-overflow-above { top: 2px; }
+.knox-tl-overflow-below { bottom: 2px; }
+
+.knox-tl-template-input {
+  width: 100%;
+  font-family: var(--font-monospace);
+  resize: vertical;
+}

@@ -1,6 +1,6 @@
 {
   "name": "knox-timeline",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "description": "BusyCal-style timeline view of your Fastmail calendar (and read-only iCal URLs) in a sidebar leaf, with one-click meeting note creation.",
   "main": "main.js",
   "scripts": {

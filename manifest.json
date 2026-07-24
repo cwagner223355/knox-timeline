@@ -1,9 +1,11 @@
 {
   "id": "knox-timeline",
   "name": "Knox Timeline",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "minAppVersion": "1.11.4",
   "description": "BusyCal-style timeline view of your Fastmail calendar (and read-only iCal URLs) in a sidebar leaf, with one-click meeting note creation.",
   "author": "Chris Wagner",
+  "authorUrl": "https://github.com/cwagner223355",
+  "fundingUrl": "https://ko-fi.com/S6S6Z9TE1",
   "isDesktopOnly": true
 }

@@ -66,6 +66,16 @@ function normalizeConfig(raw: { folder?: string; format?: string; template?: str
   };
 }
 
+/**
+ * The basename (no extension) of the daily note for `day`, formatted with the
+ * user's configured daily-note format. Lets meeting-note templates link the
+ * correct daily note regardless of how the user names theirs.
+ */
+export function dailyNoteName(app: App, day: Date): string {
+  const cfg = getDailyNoteConfig(app);
+  return formatDate(day, cfg.format);
+}
+
 async function readTemplateBody(app: App, templatePath: string): Promise<string> {
   if (!templatePath) return "";
   const withExt = templatePath.endsWith(".md") ? templatePath : `${templatePath}.md`;

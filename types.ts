@@ -36,6 +36,15 @@ export interface KnoxTimelineSettings {
   weekStartsOn: WeekStart;
   icalUrls: IcalUrlConfig[];
   nowLineRefreshMinutes: number;
+  /** Vault folder new meeting notes are created in. */
+  meetingNoteFolder: string;
+  /**
+   * Template for meeting notes created from an event. Supports the placeholders
+   * documented in `note-creator.ts`. Empty string uses the built-in default.
+   */
+  meetingNoteTemplate: string;
+  /** Set true after the panel has been auto-opened once, so it isn't forced open on every launch. */
+  hasAutoOpened: boolean;
   cachedSnapshot?: ScheduleSnapshot;
 }
 
@@ -53,6 +62,9 @@ export const DEFAULT_SETTINGS: KnoxTimelineSettings = {
   weekStartsOn: 0,
   icalUrls: [],
   nowLineRefreshMinutes: 10,
+  meetingNoteFolder: "Meeting Notes",
+  meetingNoteTemplate: "",
+  hasAutoOpened: false,
 };
 
 export interface CalCalendar {

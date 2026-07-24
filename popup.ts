@@ -55,7 +55,9 @@ export function openEventPopup(
   anchor.addEventListener("mouseenter", cancelClose, opts);
   popup.addEventListener("mouseenter", cancelClose, opts);
 
-  window.addEventListener(
+  // Bind to the window that actually hosts the popup (handles popout windows).
+  const win = anchor.ownerDocument.defaultView ?? activeWindow;
+  win.addEventListener(
     "mousedown",
     (e) => {
       const tgt = e.target as Node | null;
@@ -64,7 +66,7 @@ export function openEventPopup(
     },
     opts,
   );
-  window.addEventListener(
+  win.addEventListener(
     "keydown",
     (e) => {
       if (e.key === "Escape") closePopup();
@@ -150,6 +152,7 @@ function renderPopup(event: CalEvent, calendar: CalCalendar | undefined): HTMLEl
 }
 
 function positionPopup(popup: HTMLElement, anchor: HTMLElement): void {
+  const win = anchor.ownerDocument.defaultView ?? activeWindow;
   const rect = anchor.getBoundingClientRect();
   const popupW = 320;
   const margin = 8;
@@ -157,15 +160,15 @@ function positionPopup(popup: HTMLElement, anchor: HTMLElement): void {
 
   let left = rect.left - popupW - margin;
   if (left < margin) left = rect.right + margin;
-  if (left + popupW > window.innerWidth - margin) left = window.innerWidth - popupW - margin;
+  if (left + popupW > win.innerWidth - margin) left = win.innerWidth - popupW - margin;
 
   let top = rect.top;
   popup.style.left = `${left}px`;
   popup.style.top = `${top}px`;
 
   const ph = popup.getBoundingClientRect().height;
-  if (top + ph > window.innerHeight - margin) {
-    top = Math.max(margin, window.innerHeight - ph - margin);
+  if (top + ph > win.innerHeight - margin) {
+    top = Math.max(margin, win.innerHeight - ph - margin);
     popup.style.top = `${top}px`;
   }
 }
