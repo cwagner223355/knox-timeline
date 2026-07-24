@@ -52,8 +52,8 @@ Knox Timeline is not yet in the Community plugins directory. Install it via BRAT
 | External iCal URLs | list | empty | Read-only iCal feeds (Google Calendar secret URL, iCloud public calendar, Outlook published calendar, etc.). Each has name, URL, color, and an enabled toggle. |
 | Default view | dropdown | Today and tomorrow | Single day or today + tomorrow side-by-side. |
 | Enabled calendars | toggle list | all discovered | Which calendars to include in the timeline. |
-| Meeting note folder | text | Meeting Notes | Vault folder where notes created from an event are saved. |
-| Meeting note template | text area | built-in default | Body for new meeting notes. Placeholders: `{{title}}`, `{{date}}`, `{{start_time}}`, `{{end_time}}`, `{{video_url}}`, `{{busycal_url}}`, `{{uid}}`, `{{daily_note}}`. Keep `event_uid` so a note can be matched back to its event. |
+| Meeting note folder | text (with folder autocomplete) | Meeting Notes | Vault folder where notes created from an event are saved. |
+| Meeting note template | text area | blank | Body for new meeting notes. Blank creates an empty note (handy if another plugin fills in frontmatter). Variables (explained in settings): `{{title}}`, `{{date}}`, `{{start_time}}`, `{{end_time}}`, `{{video_url}}`, `{{busycal_url}}`, `{{uid}}`, `{{daily_note}}`. Store `{{uid}}` as `event_uid` so a note can be matched back to its event. |
 
 ## Commands
 

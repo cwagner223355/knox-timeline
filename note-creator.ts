@@ -16,24 +16,15 @@ const MAX_SUFFIX = 20;
 
 /**
  * Default meeting-note body used when the user hasn't set their own template.
- * Deliberately generic (no vault-specific frontmatter). `event_uid` is what lets
- * the plugin recognize an event's note again, so keep it if you customize this.
+ * Blank by design: many users add frontmatter with another plugin, so a new
+ * note is created empty and left for that plugin (or the user) to populate.
  *
- * Supported placeholders: {{title}} {{date}} {{start_time}} {{end_time}}
- * {{video_url}} {{busycal_url}} {{uid}} {{daily_note}}.
+ * Supported template placeholders (see settings): {{title}} {{date}}
+ * {{start_time}} {{end_time}} {{video_url}} {{busycal_url}} {{uid}}
+ * {{daily_note}}. Include {{uid}} as `event_uid` if you want the plugin to
+ * recognize an event's note again for reliable open/collision handling.
  */
-export const DEFAULT_MEETING_TEMPLATE = [
-  "---",
-  'event_uid: "{{uid}}"',
-  "date: {{date}}",
-  "start: {{start_time}}",
-  "end: {{end_time}}",
-  "url: {{video_url}}",
-  "---",
-  "",
-  "# {{title}}",
-  "",
-].join("\n");
+export const DEFAULT_MEETING_TEMPLATE = "";
 
 export interface MeetingNoteOptions {
   folder: string;

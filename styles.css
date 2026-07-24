@@ -410,3 +410,24 @@
   font-family: var(--font-monospace);
   resize: vertical;
 }
+
+.knox-tl-template-vars {
+  margin: -6px 0 16px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+.knox-tl-template-vars-intro {
+  margin: 0 0 4px;
+  font-weight: 600;
+}
+.knox-tl-template-vars-list {
+  margin: 0;
+  padding-left: 18px;
+}
+.knox-tl-template-vars-list li {
+  margin: 2px 0;
+}
+.knox-tl-template-vars-list code {
+  color: var(--text-normal);
+  font-size: var(--font-ui-smaller);
+}

@@ -1,8 +1,8 @@
 import { App, Notice, PluginSettingTab, SecretComponent, Setting } from "obsidian";
 import type KnoxTimelinePlugin from "./main";
 import { CalDavAuthError, fetchCalendars } from "./caldav";
+import { FolderSuggest } from "./folder-suggest";
 import { IcalUrlModal } from "./ical-url-modal";
-import { DEFAULT_MEETING_TEMPLATE } from "./note-creator";
 import { DEFAULT_FASTMAIL_SECRET_ID, DEFAULT_SETTINGS, type IcalUrlConfig } from "./types";
 
 export class KnoxTimelineSettingTab extends PluginSettingTab {
@@ -189,7 +189,7 @@ export class KnoxTimelineSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("Meeting note folder")
       .setDesc("Vault folder where notes created from an event are saved.")
-      .addText((t) =>
+      .addText((t) => {
         t
           .setPlaceholder(DEFAULT_SETTINGS.meetingNoteFolder)
           .setValue(this.plugin.settings.meetingNoteFolder)
@@ -197,25 +197,32 @@ export class KnoxTimelineSettingTab extends PluginSettingTab {
             this.plugin.settings.meetingNoteFolder =
               v.trim() || DEFAULT_SETTINGS.meetingNoteFolder;
             await this.plugin.saveSettings();
-          }),
-      );
+          });
+        new FolderSuggest(this.app, t.inputEl).onSelect(async (folder) => {
+          t.setValue(folder.path);
+          this.plugin.settings.meetingNoteFolder = folder.path;
+          await this.plugin.saveSettings();
+        });
+      });
 
     new Setting(containerEl)
       .setName("Meeting note template")
       .setDesc(
-        "Body for new meeting notes. Placeholders: {{title}}, {{date}}, {{start_time}}, {{end_time}}, {{video_url}}, {{busycal_url}}, {{uid}}, {{daily_note}}. Leave blank for a simple default. Keep event_uid so a note can be matched back to its event.",
+        "Body for new meeting notes. Leave blank to create an empty note (handy if another plugin fills in frontmatter). The variables below can be used anywhere in the template.",
       )
       .addTextArea((t) => {
         t.inputEl.rows = 8;
         t.inputEl.addClass("knox-tl-template-input");
         t
-          .setPlaceholder(DEFAULT_MEETING_TEMPLATE)
+          .setPlaceholder("Leave blank for an empty note")
           .setValue(this.plugin.settings.meetingNoteTemplate)
           .onChange(async (v) => {
             this.plugin.settings.meetingNoteTemplate = v;
             await this.plugin.saveSettings();
           });
       });
+
+    this.renderTemplateVariableHelp(containerEl);
 
     new Setting(containerEl).setName("Notes").setHeading();
     const notes = containerEl.createEl("p");
@@ -230,6 +237,30 @@ export class KnoxTimelineSettingTab extends PluginSettingTab {
     sec.setText(
       "Network traffic to caldav.fastmail.com is HTTPS only, so credentials are encrypted in transit.",
     );
+  }
+
+  private renderTemplateVariableHelp(containerEl: HTMLElement): void {
+    const wrap = containerEl.createDiv({ cls: "knox-tl-template-vars" });
+    wrap.createEl("p", { cls: "knox-tl-template-vars-intro", text: "Template variables:" });
+    const list = wrap.createEl("ul", { cls: "knox-tl-template-vars-list" });
+    const vars: [string, string][] = [
+      ["{{title}}", "Event title."],
+      ["{{date}}", "Event date, as YYYY-MM-DD."],
+      ["{{start_time}}", "Start time, e.g. 9:30 AM. Blank for all-day events."],
+      ["{{end_time}}", "End time, e.g. 10:00 AM. Blank for all-day events."],
+      ["{{video_url}}", "Detected Zoom / Google Meet / Teams link, or blank."],
+      ["{{busycal_url}}", "busycalevent:// deep link that opens the event in BusyCal."],
+      [
+        "{{uid}}",
+        "The event's unique id. Store it as event_uid to let the plugin re-open the right note and avoid duplicates.",
+      ],
+      ["{{daily_note}}", "Basename of that day's daily note, for a [[wikilink]]."],
+    ];
+    for (const [name, desc] of vars) {
+      const li = list.createEl("li");
+      li.createEl("code", { text: name });
+      li.createSpan({ text: `: ${desc}` });
+    }
   }
 
   private openIcalUrlModal(initial: IcalUrlConfig | null): void {
