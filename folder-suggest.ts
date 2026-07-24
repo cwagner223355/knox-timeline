@@ -14,11 +14,12 @@ export class FolderSuggest extends AbstractInputSuggest<TFolder> {
 
   protected getSuggestions(query: string): TFolder[] {
     const q = query.toLowerCase();
-    const out: TFolder[] = [];
-    for (const f of this.appRef.vault.getAllLoadedFiles()) {
-      if (f instanceof TFolder && f.path.toLowerCase().includes(q)) out.push(f);
-    }
-    return out.slice(0, 100);
+    // Enumerate folders only (not every file) to keep the plugin's vault access
+    // narrow: this powers folder autocomplete and needs nothing else.
+    return this.appRef.vault
+      .getAllFolders(true)
+      .filter((f) => f.path.toLowerCase().includes(q))
+      .slice(0, 100);
   }
 
   renderSuggestion(folder: TFolder, el: HTMLElement): void {

@@ -12,17 +12,12 @@ const NS_CALDAV = "urn:ietf:params:xml:ns:caldav";
 const NS_APPLE = "http://apple.com/ns/ical/";
 
 function basicAuth(username: string, password: string): string {
-  const raw = `${username}:${password}`;
-  let encoded: string;
-  if (typeof btoa === "function") {
-    const bytes = new TextEncoder().encode(raw);
-    let bin = "";
-    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-    encoded = btoa(bin);
-  } else {
-    encoded = Buffer.from(raw, "utf-8").toString("base64");
-  }
-  return `Basic ${encoded}`;
+  // Desktop-only plugin, so btoa is always available (Electron renderer).
+  // Encode as UTF-8 bytes first so non-ASCII characters survive base64.
+  const bytes = new TextEncoder().encode(`${username}:${password}`);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return `Basic ${btoa(bin)}`;
 }
 
 function calendarHomeUrl(username: string): string {

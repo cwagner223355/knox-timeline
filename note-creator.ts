@@ -47,7 +47,10 @@ function findNoteForEvent(app: App, event: CalEvent, folder: string): TFile | nu
   for (let i = 1; i <= MAX_SUFFIX; i++) {
     const f = app.vault.getAbstractFileByPath(candidatePath(folder, dateStr, sanitized, i));
     if (!(f instanceof TFile)) continue;
-    const uid = app.metadataCache.getFileCache(f)?.frontmatter?.event_uid;
+    const fm = app.metadataCache.getFileCache(f)?.frontmatter as
+      | Record<string, unknown>
+      | undefined;
+    const uid = fm?.event_uid;
     if (uid == null || String(uid) === event.uid) return f;
   }
   return null;
@@ -119,7 +122,7 @@ function renderTemplate(tpl: string, app: App, event: CalEvent, dateStr: string)
     uid: event.uid,
     daily_note: dailyNoteName(app, start),
   };
-  return tpl.replace(/\{\{(\w+)\}\}/g, (match, key) =>
+  return tpl.replace(/\{\{(\w+)\}\}/g, (match: string, key: string) =>
     Object.prototype.hasOwnProperty.call(values, key) ? values[key] : match,
   );
 }
